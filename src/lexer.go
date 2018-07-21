@@ -3,18 +3,19 @@ package main
 import (
 	"os"
 	"io"
+	"bytes"
 	"fmt"
-	"unicode"
 )
 
 type Lexer struct {
 	file *os.File
-	currChar [1]byte
+	currChar byte
 	isEOF bool
 }
 
-func (this Lexer) advance() {
-	_, err := this.file.Read(this.currChar[:])
+func (this *Lexer) advance() {
+	var b [1]byte
+	_, err := this.file.Read(b[:])
 	
 	if err != nil {
 		if err == io.EOF {
@@ -24,36 +25,69 @@ func (this Lexer) advance() {
 			panic(err)
 		}
 	}
+
+	this.currChar = b[0]
 }
 
-func (this Lexer) buildIdentifier() {
-	for unicode.IsLetter(this.currChar) || 
-	for _, r := range s {
-        if !unicode.IsLetter(r) {
-            return false
-        }
-    }
+func (this *Lexer) buildIdentifier() Token {
+    var buffer bytes.Buffer
+
+	for IsAsciiLetter(this.currChar) || IsAsciiDigit(this.currChar) {
+		buffer.WriteByte(this.currChar)
+		this.advance()
+	}
+
+	return Token{TokenType_IDENTIFIER, buffer.String()}
 }
 
-func (this Lexer) GetNextToken() {
+func (this *Lexer) buildString() Token {
+	var buffer bytes.Buffer
+	this.advance()
 
-	if (this.isEOF) {
+	for this.currChar != byte('"') {
+		buffer.WriteByte(this.currChar)
 		this.advance()
-		return Token{TokenType_EOF, ""}
 	}
 
-	if (this.currChar == '(') {
-		this.advance()
-		return Token{TokenType_LPAREN, ""}
-	}
+	this.advance()
+	return Token{TokenType_STRING, buffer.String()}
+}
 
-	if (this.currChar == ')') {
-		this.advance()
-		return Token(TokenType_RPAREN, "")
-	}
+func (this *Lexer) GetNextToken() Token {
+	for {
+		if this.isEOF {
+			return Token{TokenType_EOF, ""}
+		}
 
-	if (unicode.IsLetter(this.currChar)) {
-		return this.buildIdentifier()
+		if this.currChar == byte(' ') || this.currChar == byte('\n') || this.currChar == byte('\t') {
+			this.advance()
+			continue
+		}
+
+		if this.currChar == byte('(') {
+			this.advance()
+			return Token{TokenType_LPAREN, ""}
+		}
+
+		if this.currChar == byte(')') {
+			this.advance()
+			return Token{TokenType_RPAREN, ""}
+		}
+
+		if this.currChar == byte(';') {
+			this.advance()
+			return Token{TokenType_SEMI, ""}
+		}
+
+		if this.currChar == byte('"') {
+			return this.buildString()
+		}
+
+		if IsAsciiLetter(this.currChar) {
+			return this.buildIdentifier()
+		}
+
+		panic(fmt.Sprintf("Illegal character: '%s' %d(%q)", string(this.currChar), this.currChar, this.currChar))
 	}
 }
 
@@ -61,7 +95,7 @@ func NewLexer(fileName string) Lexer {
 	file, err := os.Open("./main.es")
 	check(err)
 
-	this := {file, [1]byte{0}, false}
+	this := Lexer{file, 0, false}
 	this.advance()
 
 	return this
